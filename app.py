@@ -347,8 +347,33 @@ def results_page():
                 unsafe_allow_html=True)
 
 
+def access_gate():
+    """If APP_ACCESS_CODE is set in secrets, require it before showing the app."""
+    required_code = st.secrets.get("APP_ACCESS_CODE", "")
+    if not required_code:
+        return True
+    if st.session_state.get("authed"):
+        return True
+
+    header("Private Access", "Enneagram Clinical Assessment",
+           "This assessment link is restricted. Please enter the access code "
+           "provided by your therapist to continue.")
+    with st.form("access_form"):
+        code = st.text_input("Access code", type="password")
+        submitted = st.form_submit_button("Enter →")
+    if submitted:
+        if code == required_code:
+            st.session_state["authed"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect access code.")
+    return False
+
+
 def main():
     init_state()
+    if not access_gate():
+        return
     stage = st.session_state["stage"]
     if stage == "intro":
         intro_page()
