@@ -2,6 +2,7 @@
 .env
 .env.*
 *.env.key
+.sessions/
 __pycache__/
 *.pyc
 .venv/

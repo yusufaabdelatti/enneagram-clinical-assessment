@@ -1,4 +1,5 @@
 import random
+import uuid
 import streamlit as st
 
 from enneagram.questions import (
@@ -8,6 +9,7 @@ from enneagram.scoring import score_types, score_instincts, score_functioning, b
 from enneagram.content import TYPE_PROFILES, LEVEL_BANDS
 from enneagram.report import generate_pdf_report, TYPE_COLORS_HEX
 from enneagram.email_utils import send_report_email, THERAPIST_EMAIL
+from enneagram.persistence import save_session, load_session, delete_session
 
 st.set_page_config(
     page_title="Enneagram Clinical Assessment",
@@ -100,8 +102,40 @@ def header(kicker, title, sub=None):
     st.markdown('<hr class="gold">', unsafe_allow_html=True)
 
 
+def _get_or_create_token():
+    params = st.query_params
+    token = params.get("sid")
+    if not token:
+        token = uuid.uuid4().hex
+        st.query_params["sid"] = token
+    return token
+
+
 def init_state():
     ss = st.session_state
+
+    if "sid" not in ss:
+        ss["sid"] = _get_or_create_token()
+
+    # A fresh session_state (e.g. after a refresh or a dropped connection)
+    # won't have "_restored" set yet - try to recover progress from disk
+    # using the token that's still sitting in the browser's URL.
+    if not ss.get("_restored"):
+        ss["_restored"] = True
+        saved = load_session(ss["sid"])
+        if saved:
+            for k, v in saved.items():
+                ss[k] = v
+            # Pre-seed the individual widget keys too, so the radio buttons
+            # themselves render with the client's prior answers already
+            # selected, not just our bookkeeping dicts.
+            for idx, val in saved.get("type_answers", {}).items():
+                ss[f"type_{idx}"] = val
+            for idx, val in saved.get("instinct_answers", {}).items():
+                ss[f"inst_{idx}"] = val
+            for idx, val in saved.get("functioning_answers", {}).items():
+                ss[f"func_{idx}"] = val
+
     ss.setdefault("stage", "intro")
     ss.setdefault("client_name", "")
     ss.setdefault("client_notes", "")
@@ -119,6 +153,13 @@ def init_state():
         order = list(range(len(INSTINCT_ITEMS)))
         random.Random(7).shuffle(order)
         ss["instinct_order"] = order
+
+
+def persist_progress():
+    try:
+        save_session(st.session_state["sid"], st.session_state)
+    except Exception:
+        pass  # a save hiccup should never block the assessment itself
 
 
 def progress_bar(current, total, label):
@@ -143,6 +184,9 @@ def intro_page():
         'wish to be or how you act in just one context. There are no right or wrong answers. '
         f'Your results will be compiled into a confidential clinical report and sent only to '
         f'your therapist&rsquo;s secure inbox.</p>'
+        '<p style="margin:0.6rem 0 0 0; color:#8A94A6; font-size:0.82rem;">'
+        'Your progress saves automatically as you go — it&rsquo;s safe to refresh the page, '
+        'go back, or reconnect without losing your answers, as long as you use the same link/tab.</p>'
         '</div>', unsafe_allow_html=True)
 
     with st.form("client_info_form"):
@@ -340,6 +384,7 @@ def results_page():
                         send_report_email(api_key, st.session_state["pdf_bytes"],
                                            st.session_state["client_name"], from_addr)
                     st.success(f"Report emailed to {THERAPIST_EMAIL}.")
+                    delete_session(st.session_state["sid"])
                 except Exception as e:
                     st.error(f"Could not send email: {e}")
 
@@ -373,6 +418,7 @@ def access_gate():
 def main():
     init_state()
     if not access_gate():
+        persist_progress()
         return
     stage = st.session_state["stage"]
     if stage == "intro":
@@ -385,6 +431,7 @@ def main():
         functioning_page()
     elif stage == "results":
         results_page()
+    persist_progress()
 
 
 if __name__ == "__main__":
