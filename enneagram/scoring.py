@@ -65,7 +65,12 @@ def score_instincts(instinct_answers):
         normalized[inst] = round((raw[inst] / max_possible) * 100, 1) if max_possible else 0.0
 
     stack = sorted(normalized.items(), key=lambda kv: kv[1], reverse=True)
-    return {"raw": raw, "normalized": normalized, "stack": stack}
+    positions = {
+        "dominant": stack[0],
+        "secondary": stack[1],
+        "blind_spot": stack[2],
+    }
+    return {"raw": raw, "normalized": normalized, "stack": stack, "positions": positions}
 
 
 def score_functioning(functioning_answers):

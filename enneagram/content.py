@@ -290,3 +290,74 @@ CENTER_SUMMARY = {
     "Heart Center": "Relates primarily through image, identity, and relationship; core emotional theme is shame.",
     "Head Center": "Relates primarily through thinking, planning, and anticipation; core emotional theme is fear/anxiety.",
 }
+
+HARMONIC_TRIAD_DESC = {
+    "Positive Outlook": "Copes with frustration by reframing it positively and moving attention away from "
+                         "negativity - the trade-off can be minimizing real problems to stay upbeat.",
+    "Competency": "Copes with frustration by setting feeling aside and solving the problem objectively - "
+                  "the trade-off can be under-acknowledging emotion, their own or others'.",
+    "Reactive": "Copes with frustration with visible emotional intensity and needs that intensity "
+                "acknowledged before moving on - the trade-off can be escalation if it isn't.",
+}
+
+HORNEVIAN_GROUP_DESC = {
+    "Assertive": "Pursues needs by moving toward/against resistance directly - taking up space, pushing "
+                 "the situation to resolve on their terms.",
+    "Compliant": "Pursues needs by moving toward an internalized standard, duty, or authority - working "
+                 "within the system rather than pushing against it.",
+    "Withdrawn": "Pursues needs by moving away internally - stepping back to process before (or instead "
+                 "of) engaging the external situation directly.",
+}
+
+# Riso-Hudson's traditional type-specific Nine Levels of Development, grouped
+# into the same three health bands this tool's own functioning scale uses -
+# but note in FUNCTIONING_VS_LEVELS_NOTE below that the two are NOT the same
+# measurement and one cannot be mathematically derived from the other.
+RISO_HUDSON_LEVELS = [
+    (1, "Healthy", "Level of Liberation"),
+    (2, "Healthy", "Level of Psychological Capacity"),
+    (3, "Healthy", "Level of Social Value"),
+    (4, "Average", "Level of Imbalance / Social Role"),
+    (5, "Average", "Level of Interpersonal Control"),
+    (6, "Average", "Level of Overcompensation"),
+    (7, "Unhealthy", "Level of Violation"),
+    (8, "Unhealthy", "Level of Obsession and Compulsion"),
+    (9, "Unhealthy", "Level of Pathological Destructiveness"),
+]
+
+FUNCTIONING_VS_LEVELS_NOTE = (
+    "This tool's Functioning Score is a separate, general self-report wellbeing/capacity scale "
+    "(15 original items, 0-100%), not the traditional Enneagram Levels of Development. Riso and "
+    "Hudson's own Nine Levels are type-specific, clinically described in their books, and were never "
+    "validated against a simple percentage self-report instrument. The three health bands this tool "
+    "uses (Unhealthy/Average/Healthy) intentionally mirror the traditional levels' three-band grouping "
+    "(Levels 7-9 / 4-6 / 1-3) for conceptual familiarity, but there is no defensible arithmetic "
+    "conversion from this tool's percentage to a specific level 1-9. Report the percentage and band "
+    "only - do not state or imply a specific traditional Level without separate clinical judgment."
+)
+
+FIX_DESCRIPTIONS = {
+    "Body (Gut) Center": "Gut/Body Fix - the client's highest-scoring type among 8, 9, 1. Contributes the "
+                          "instinctual/anger-center flavor of the tritype: how they assert, resist, or "
+                          "control their environment.",
+    "Heart Center": "Heart Fix - the client's highest-scoring type among 2, 3, 4. Contributes the "
+                     "image/shame-center flavor: how they manage identity, image, and connection.",
+    "Head Center": "Head Fix - the client's highest-scoring type among 5, 6, 7. Contributes the "
+                    "thinking/fear-center flavor: how they plan, anticipate, and manage uncertainty.",
+}
+
+INSTINCT_POSITION_DESC = {
+    "dominant": "Dominant - gets attention first and most automatically. Usually the instinct the client "
+                "would describe as 'just how I operate' without much reflection.",
+    "secondary": "Secondary - a supporting focus, engaged more consciously and more flexibly than the "
+                 "dominant instinct, often used in service of it.",
+    "blind_spot": "Blind Spot (least developed) - the most neglected instinctual focus. Not a weakness to "
+                  "fix, but an area the client may under-resource or overlook, worth naming gently.",
+}
+
+ARROW_CLARIFICATION = (
+    "Integration and disintegration describe behavior a person temporarily 'borrows' from another type "
+    "under security/growth or stress, respectively - they are not evidence of a literal change in core "
+    "type or a personality transformation. Core type remains constant; what shifts is which behaviors "
+    "become more available under different conditions."
+)

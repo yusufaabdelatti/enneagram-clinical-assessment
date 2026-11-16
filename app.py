@@ -8,7 +8,9 @@ from enneagram.questions import (
 from enneagram.scoring import score_types, score_instincts, score_functioning, band_for_score
 from enneagram.content import TYPE_PROFILES, LEVEL_BANDS
 from enneagram.report import generate_pdf_report, TYPE_COLORS_HEX
-from enneagram.email_utils import send_report_email, THERAPIST_EMAIL
+from enneagram.report_intervention import generate_intervention_pdf
+from enneagram.groq_utils import generate_intervention_content
+from enneagram.email_utils import send_report_email, send_intervention_email, THERAPIST_EMAIL
 from enneagram.persistence import save_session, load_session, delete_session
 
 st.set_page_config(
@@ -347,11 +349,11 @@ def results_page():
         st.write(f"**{inst.upper()}** — {val:.0f}%")
 
     st.divider()
-    st.markdown("#### Generate & Send Full Report")
+    st.markdown("#### Report 1 — Client Assessment Report")
     st.caption(
         f"The complete PDF report — including all charts, clinical notes, growth/stress "
         f"pathways, and the full item-by-item question/answer transcript — will be emailed "
-        f"only to the therapist's secure inbox ({THERAPIST_EMAIL}). It is never sent to the client.")
+        f"only to the practitioner's secure inbox ({THERAPIST_EMAIL}). It is never sent to the client.")
 
     if st.button("Generate PDF Report", type="primary"):
         with st.spinner("Building report…"):
@@ -365,17 +367,74 @@ def results_page():
                 functioning_answers=st.session_state["functioning_answers"],
             )
         st.session_state["pdf_bytes"] = pdf_bytes
-        st.success("Report generated.")
+        st.success("Client report generated.")
 
     if st.session_state.get("pdf_bytes"):
         st.download_button(
-            "Download PDF", data=st.session_state["pdf_bytes"],
+            "Download Client Report PDF", data=st.session_state["pdf_bytes"],
             file_name=f"Enneagram_Report_{st.session_state['client_name'] or 'client'}.pdf",
             mime="application/pdf",
         )
+
+    st.divider()
+    st.markdown("#### Report 2 — Intervention & Session Planning Report (Practitioner Only)")
+    st.caption(
+        "Confidential, practitioner-only material: psychological formulation, strengths, "
+        "development areas, session questions, discussion topics, choice-based scenarios, "
+        "suggested interventions, and a session roadmap — personalized from this client's "
+        "actual results via Groq. Never intended for the client."
+    )
+
+    groq_key = st.secrets.get("GROQ_API_KEY", "")
+    groq_model = st.secrets.get("GROQ_MODEL", "")
+    if st.button("Generate Intervention Report"):
+        if not groq_key:
+            st.error(
+                "GROQ_API_KEY is not configured. Get a free key at "
+                "https://console.groq.com/keys (sign up, then 'Create API Key') and add it "
+                "to Streamlit secrets as GROQ_API_KEY."
+            )
+        else:
+            try:
+                with st.spinner("Generating personalized intervention content…"):
+                    ai_content = generate_intervention_content(
+                        client_name=st.session_state["client_name"],
+                        type_result=type_result,
+                        instinct_result=instinct_result,
+                        functioning_score=functioning_score,
+                        type_answers=st.session_state["type_answers"],
+                        instinct_answers=st.session_state["instinct_answers"],
+                        api_key=groq_key,
+                        model=groq_model or None,
+                    )
+                    intervention_pdf = generate_intervention_pdf(
+                        client_info={"name": st.session_state["client_name"]},
+                        type_result=type_result,
+                        instinct_result=instinct_result,
+                        functioning_score=functioning_score,
+                        ai_content=ai_content,
+                    )
+                st.session_state["intervention_pdf_bytes"] = intervention_pdf
+                st.success("Intervention report generated.")
+            except Exception as e:
+                st.error(f"Could not generate intervention report: {e}")
+
+    if st.session_state.get("intervention_pdf_bytes"):
+        st.download_button(
+            "Download Intervention Report PDF", data=st.session_state["intervention_pdf_bytes"],
+            file_name=f"Enneagram_Intervention_Report_{st.session_state['client_name'] or 'client'}.pdf",
+            mime="application/pdf",
+        )
+
+    st.divider()
+    st.markdown("#### Email Reports to Practitioner")
+    if st.session_state.get("pdf_bytes"):
         api_key = st.secrets.get("RESEND_API_KEY", "")
         from_addr = st.secrets.get("RESEND_FROM_ADDRESS", "")
-        if st.button("Email Report to Therapist"):
+        if not st.session_state.get("intervention_pdf_bytes"):
+            st.caption("Only the client report has been generated — it will be sent alone. "
+                       "Generate the intervention report above first if you want both sent together.")
+        if st.button("Email Report(s) to Practitioner"):
             if not api_key or not from_addr:
                 st.error("Email is not configured yet. Add RESEND_API_KEY and RESEND_FROM_ADDRESS to secrets.")
             else:
@@ -383,12 +442,18 @@ def results_page():
                     with st.spinner("Sending email…"):
                         send_report_email(api_key, st.session_state["pdf_bytes"],
                                            st.session_state["client_name"], from_addr)
-                    st.success(f"Report emailed to {THERAPIST_EMAIL}.")
+                        if st.session_state.get("intervention_pdf_bytes"):
+                            send_intervention_email(
+                                api_key, st.session_state["intervention_pdf_bytes"],
+                                st.session_state["client_name"], from_addr)
+                    st.success(f"Report(s) emailed to {THERAPIST_EMAIL}.")
                     delete_session(st.session_state["sid"])
                 except Exception as e:
                     st.error(f"Could not send email: {e}")
+    else:
+        st.caption("Generate the client report above first.")
 
-    st.markdown('<div class="footer-note">Confidential — for use between client and therapist only.</div>',
+    st.markdown('<div class="footer-note">Confidential — for use between client and practitioner only.</div>',
                 unsafe_allow_html=True)
 
 

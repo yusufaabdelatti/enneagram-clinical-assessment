@@ -57,6 +57,38 @@ CENTERS = {
 INTEGRATION_ARROW = {1: 7, 7: 5, 5: 8, 8: 2, 2: 4, 4: 1, 3: 6, 6: 9, 9: 3}
 DISINTEGRATION_ARROW = {1: 4, 4: 2, 2: 8, 8: 5, 5: 7, 7: 1, 3: 9, 9: 6, 6: 3}
 
+# Harmonic triads (Riso-Hudson) - how a type characteristically copes with
+# frustration/disappointment, independent of its Center of Intelligence.
+HARMONIC_TRIADS = {
+    "Positive Outlook": [2, 7, 9],
+    "Competency": [1, 3, 5],
+    "Reactive": [4, 6, 8],
+}
+
+# Hornevian groups (named for Karen Horney's "moving toward/against/away"
+# framework; Horney did not map this to the Enneagram herself - later
+# Enneagram teachers, principally Riso and Hudson, found the alignment).
+# Describes how a type characteristically pursues its needs relative to others.
+HORNEVIAN_GROUPS = {
+    "Assertive": [3, 7, 8],
+    "Compliant": [1, 2, 6],
+    "Withdrawn": [4, 5, 9],
+}
+
+
+def harmonic_triad_for(type_num):
+    for name, members in HARMONIC_TRIADS.items():
+        if type_num in members:
+            return name
+    return None
+
+
+def hornevian_group_for(type_num):
+    for name, members in HORNEVIAN_GROUPS.items():
+        if type_num in members:
+            return name
+    return None
+
 # ---------------------------------------------------------------------------
 # Core 108-item type scale (12 items x 9 types)
 # ---------------------------------------------------------------------------

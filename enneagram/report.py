@@ -20,7 +20,10 @@ from reportlab.platypus import (
 from reportlab.pdfgen import canvas as rl_canvas
 
 from .questions import TYPE_NAMES, TYPE_ITEMS, INSTINCT_ITEMS, INSTINCT_NAMES, FUNCTIONING_ITEMS
-from .content import TYPE_PROFILES, LEVEL_BANDS, CENTER_SUMMARY
+from .content import (
+    TYPE_PROFILES, LEVEL_BANDS, CENTER_SUMMARY, FIX_DESCRIPTIONS,
+    INSTINCT_POSITION_DESC, ARROW_CLARIFICATION, FUNCTIONING_VS_LEVELS_NOTE,
+)
 from .scoring import band_for_score
 
 # ---------------------------------------------------------------------------
@@ -286,6 +289,7 @@ def generate_pdf_report(client_info, type_result, instinct_result, functioning_s
     story.append(Paragraph(f"<b>Under stress:</b> {prof['stress_behaviors']}", ss["Body"]))
     story.append(Paragraph(f"<b>Stress arrow:</b> {prof['stress_direction']}", ss["Body"]))
     story.append(Paragraph(f"<b>Growth arrow:</b> {prof['growth_direction']}", ss["Body"]))
+    story.append(Paragraph(f"<i>{ARROW_CLARIFICATION}</i>", ss["BodySmall"]))
 
     story.append(Paragraph("Clinical Notes", ss["SubHeader"]))
     story.append(Paragraph(prof["therapy_notes"], ss["Body"]))
@@ -303,12 +307,15 @@ def generate_pdf_report(client_info, type_result, instinct_result, functioning_s
         f"primary type's pattern rather than replacing it.", ss["Body"]))
 
     story.append(Spacer(1, 10))
-    dom_key = instinct_result["stack"][0][0]
-    story.append(Paragraph(
-        f"Dominant instinct: <b>{INSTINCT_NAMES[dom_key]}</b>. This describes where attention and "
-        f"energy are drawn first — self-preservation (safety/resources), social (group/belonging), "
-        f"or sexual/one-to-one (intensity/connection) — and interacts with the core type pattern above.",
-        ss["Body"]))
+    stack = instinct_result["stack"]
+    stack_notation = " / ".join(code.upper() for code, _pct in stack)
+    story.append(Paragraph(f"<b>Full Instinctual Stack: {stack_notation}</b>", ss["Body"]))
+    position_labels = ["dominant", "secondary", "blind_spot"]
+    for (code, pct), pos in zip(stack, position_labels):
+        label = pos.replace("_", " ").title()
+        story.append(Paragraph(
+            f"<b>{label} — {INSTINCT_NAMES[code]} ({pct:.0f}%):</b> {INSTINCT_POSITION_DESC[pos]}",
+            ss["Body"]))
 
     # ---------------- Functioning level ----------------
     story.append(Paragraph("Overall Functioning Indicator", ss["SectionHeader"]))
@@ -319,14 +326,22 @@ def generate_pdf_report(client_info, type_result, instinct_result, functioning_s
     story.append(Paragraph(
         "<i>Note: this is a general self-report indicator of current functioning, not a validated "
         "clinical scale. It is intended as a conversation starting point only.</i>", ss["BodySmall"]))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("<b>Traditional Enneagram Level (1-9):</b> Cannot be reliably determined "
+                            "from this score - see note below.", ss["Body"]))
+    story.append(Paragraph(FUNCTIONING_VS_LEVELS_NOTE, ss["BodySmall"]))
 
     story.append(PageBreak())
 
     # ---------------- Centers ----------------
     story.append(Paragraph("Centers of Intelligence (Tritype Summary)", ss["SectionHeader"]))
+    story.append(Paragraph(
+        f"<b>Core Type (primary driver): {primary} — {prof['name']}.</b> The two fixes below are "
+        f"supporting influences from the other centers, not alternate core types.", ss["Body"]))
     for center, type_num in type_result["tritype"].items():
         story.append(Paragraph(f"{center} → Type {type_num} ({TYPE_NAMES[type_num]})", ss["SubHeader"]))
         story.append(Paragraph(CENTER_SUMMARY[center], ss["Body"]))
+        story.append(Paragraph(FIX_DESCRIPTIONS[center], ss["BodySmall"]))
 
     story.append(PageBreak())
 
