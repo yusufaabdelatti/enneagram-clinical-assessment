@@ -16,7 +16,7 @@ import time
 SESSIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".sessions")
 
 PERSISTED_KEYS = [
-    "stage", "client_name", "client_notes", "authed", "lang",
+    "stage", "client_name", "client_notes", "authed", "lang", "submitted",
     "type_answers", "instinct_answers", "functioning_answers",
     "type_page", "instinct_page", "functioning_page",
     "type_order", "instinct_order",

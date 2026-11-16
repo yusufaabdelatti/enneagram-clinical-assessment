@@ -81,6 +81,13 @@ STRINGS = {
         "access_code_label": "Access code",
         "access_enter_button": "Enter →",
         "access_error": "Incorrect access code.",
+        "finalizing_label": "Finalizing your assessment…",
+        "thankyou_title": "Thank you.",
+        "thankyou_body": (
+            "Your assessment is complete and has been securely sent to your therapist. "
+            "No results are shown here — your therapist will go over everything with you "
+            "in your next session. You may now close this window."
+        ),
     },
     "ar": {
         "lang_label": "اللغة",
@@ -157,6 +164,12 @@ STRINGS = {
         "access_code_label": "رمز الوصول",
         "access_enter_button": "دخول ←",
         "access_error": "رمز الوصول غير صحيح.",
+        "finalizing_label": "جارٍ إنهاء تقييمك…",
+        "thankyou_title": "شكرًا لك.",
+        "thankyou_body": (
+            "اكتمل تقييمك وتم إرساله بأمان إلى معالجك النفسي. لا تُعرض أي نتائج هنا — "
+            "سيستعرض معالجك كل شيء معك في جلستك القادمة. يمكنك الآن إغلاق هذه النافذة."
+        ),
     },
 }
 

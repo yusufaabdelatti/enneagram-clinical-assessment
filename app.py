@@ -3,16 +3,15 @@ import uuid
 import streamlit as st
 
 from enneagram.questions import (
-    TYPE_ITEMS, INSTINCT_ITEMS, FUNCTIONING_ITEMS, TYPE_NAMES,
+    TYPE_ITEMS, INSTINCT_ITEMS, FUNCTIONING_ITEMS,
 )
 from enneagram.questions_ar import (
-    TYPE_ITEMS_AR, INSTINCT_ITEMS_AR, FUNCTIONING_ITEMS_AR, TYPE_NAMES_AR,
+    TYPE_ITEMS_AR, INSTINCT_ITEMS_AR, FUNCTIONING_ITEMS_AR,
     LIKERT_OPTIONS_AR, FUNC_LIKERT_OPTIONS_AR,
 )
 from enneagram.i18n import t
-from enneagram.scoring import score_types, score_instincts, score_functioning, band_for_score
-from enneagram.content import TYPE_PROFILES, LEVEL_BANDS
-from enneagram.report import generate_pdf_report, TYPE_COLORS_HEX
+from enneagram.scoring import score_types, score_instincts, score_functioning
+from enneagram.report import generate_pdf_report
 from enneagram.report_intervention import generate_intervention_pdf
 from enneagram.groq_utils import generate_intervention_content
 from enneagram.email_utils import send_report_email, send_intervention_email, THERAPIST_EMAIL
@@ -380,149 +379,93 @@ def functioning_page():
             st.caption(t("answer_all_caption_single", lang))
 
 
-def results_page():
-    inject_rtl_if_needed()
+def _finalize_and_email():
+    """Builds both PDF reports and emails them to the practitioner. The client
+    never sees scores, downloads, or send controls - this runs automatically
+    once, the moment the assessment is complete."""
     lang = L()
-    header(t("results_kicker", lang), t("results_title", lang), t("results_sub", lang))
-
     type_result = score_types(st.session_state["type_answers"])
     instinct_result = score_instincts(st.session_state["instinct_answers"])
     functioning_score = score_functioning(st.session_state["functioning_answers"])
 
-    primary = type_result["primary_type"]
-    wing = type_result["wing"]
-    prof = TYPE_PROFILES[primary]
-    name_display = f'{prof["name"]} ({TYPE_NAMES_AR[primary]})' if lang == "ar" else prof["name"]
+    pdf_bytes = generate_pdf_report(
+        client_info={"name": st.session_state["client_name"]},
+        type_result=type_result,
+        instinct_result=instinct_result,
+        functioning_score=functioning_score,
+        type_answers=st.session_state["type_answers"],
+        instinct_answers=st.session_state["instinct_answers"],
+        functioning_answers=st.session_state["functioning_answers"],
+        answer_language=lang,
+    )
 
-    st.markdown(
-        f'<div class="summary-pill">Primary Type {primary} · {name_display} '
-        f'&nbsp;(Wing {wing})</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(f"**{t('core_fear_label', lang)}:** {prof['core_fear']}")
-    st.markdown(f"**{t('core_desire_label', lang)}:** {prof['core_desire']}")
-    st.markdown(f"**{t('basic_pattern_label', lang)}:** {prof['basic_pattern']}")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.subheader(t("type_scores_header", lang))
-    chart_data = {TYPE_NAMES[t_]: v for t_, v in sorted(type_result["normalized"].items())}
-    st.bar_chart(chart_data)
-
-    band_label, band_desc = band_for_score(functioning_score, LEVEL_BANDS)
-    st.subheader(t("functioning_header", lang))
-    st.metric(t("functioning_metric_label", lang), f"{functioning_score:.0f}%", band_label)
-    st.caption(band_desc)
-
-    st.subheader(t("instinct_stack_header", lang))
-    for inst, val in instinct_result["stack"]:
-        st.write(f"**{inst.upper()}** — {val:.0f}%")
-
-    st.divider()
-    st.markdown(f"#### {t('report1_header', lang)}")
-    st.caption(
-        f"The complete PDF report — including all charts, clinical notes, growth/stress "
-        f"pathways, and the full item-by-item question/answer transcript — will be emailed "
-        f"only to the practitioner's secure inbox ({THERAPIST_EMAIL}). It is never sent to the client.")
-
-    if st.button(t("generate_pdf_button", lang), type="primary"):
-        with st.spinner("Building report…"):
-            pdf_bytes = generate_pdf_report(
-                client_info={"name": st.session_state["client_name"]},
+    groq_key = st.secrets.get("GROQ_API_KEY", "")
+    groq_model = st.secrets.get("GROQ_MODEL", "")
+    intervention_pdf = None
+    if groq_key:
+        try:
+            ai_content = generate_intervention_content(
+                client_name=st.session_state["client_name"],
                 type_result=type_result,
                 instinct_result=instinct_result,
                 functioning_score=functioning_score,
                 type_answers=st.session_state["type_answers"],
                 instinct_answers=st.session_state["instinct_answers"],
-                functioning_answers=st.session_state["functioning_answers"],
-                answer_language=lang,
+                api_key=groq_key,
+                model=groq_model or None,
             )
-        st.session_state["pdf_bytes"] = pdf_bytes
-        st.success("Client report generated.")
-
-    if st.session_state.get("pdf_bytes"):
-        st.download_button(
-            t("download_client_pdf", lang), data=st.session_state["pdf_bytes"],
-            file_name=f"Enneagram_Report_{st.session_state['client_name'] or 'client'}.pdf",
-            mime="application/pdf",
-        )
-
-    st.divider()
-    st.markdown(f"#### {t('report2_header', lang)}")
-    st.caption(
-        "Confidential, practitioner-only material: psychological formulation, strengths, "
-        "development areas, session questions, discussion topics, choice-based scenarios, "
-        "suggested interventions, and a session roadmap — personalized from this client's "
-        "actual results via Groq. Never intended for the client. Always generated in English."
-    )
-
-    groq_key = st.secrets.get("GROQ_API_KEY", "")
-    groq_model = st.secrets.get("GROQ_MODEL", "")
-    if st.button(t("generate_intervention_button", lang)):
-        if not groq_key:
-            st.error(
-                "GROQ_API_KEY is not configured. Get a free key at "
-                "https://console.groq.com/keys (sign up, then 'Create API Key') and add it "
-                "to Streamlit secrets as GROQ_API_KEY."
+            intervention_pdf = generate_intervention_pdf(
+                client_info={"name": st.session_state["client_name"]},
+                type_result=type_result,
+                instinct_result=instinct_result,
+                functioning_score=functioning_score,
+                ai_content=ai_content,
             )
-        else:
+        except Exception:
+            intervention_pdf = None  # client report must still go out even if the AI step fails
+
+    api_key = st.secrets.get("RESEND_API_KEY", "")
+    from_addr = st.secrets.get("RESEND_FROM_ADDRESS", "")
+    if api_key and from_addr:
+        send_report_email(api_key, pdf_bytes, st.session_state["client_name"], from_addr)
+        if intervention_pdf is not None:
+            send_intervention_email(api_key, intervention_pdf, st.session_state["client_name"], from_addr)
+
+
+def results_page():
+    inject_rtl_if_needed()
+    lang = L()
+
+    if not st.session_state.get("submitted"):
+        header(t("results_kicker", lang), t("results_title", lang), t("results_sub", lang))
+        with st.spinner(t("finalizing_label", lang)):
             try:
-                with st.spinner("Generating personalized intervention content…"):
-                    ai_content = generate_intervention_content(
-                        client_name=st.session_state["client_name"],
-                        type_result=type_result,
-                        instinct_result=instinct_result,
-                        functioning_score=functioning_score,
-                        type_answers=st.session_state["type_answers"],
-                        instinct_answers=st.session_state["instinct_answers"],
-                        api_key=groq_key,
-                        model=groq_model or None,
-                    )
-                    intervention_pdf = generate_intervention_pdf(
-                        client_info={"name": st.session_state["client_name"]},
-                        type_result=type_result,
-                        instinct_result=instinct_result,
-                        functioning_score=functioning_score,
-                        ai_content=ai_content,
-                    )
-                st.session_state["intervention_pdf_bytes"] = intervention_pdf
-                st.success("Intervention report generated.")
+                _finalize_and_email()
             except Exception as e:
-                st.error(f"Could not generate intervention report: {e}")
-
-    if st.session_state.get("intervention_pdf_bytes"):
-        st.download_button(
-            t("download_intervention_pdf", lang), data=st.session_state["intervention_pdf_bytes"],
-            file_name=f"Enneagram_Intervention_Report_{st.session_state['client_name'] or 'client'}.pdf",
-            mime="application/pdf",
-        )
-
-    st.divider()
-    st.markdown(f"#### {t('email_header', lang)}")
-    if st.session_state.get("pdf_bytes"):
-        api_key = st.secrets.get("RESEND_API_KEY", "")
-        from_addr = st.secrets.get("RESEND_FROM_ADDRESS", "")
-        if not st.session_state.get("intervention_pdf_bytes"):
-            st.caption("Only the client report has been generated — it will be sent alone. "
-                       "Generate the intervention report above first if you want both sent together.")
-        if st.button(t("email_button", lang)):
-            if not api_key or not from_addr:
-                st.error("Email is not configured yet. Add RESEND_API_KEY and RESEND_FROM_ADDRESS to secrets.")
-            else:
+                # The client must never see an error screen - fall back to alerting
+                # the practitioner by email (best-effort) so the failure isn't silent.
                 try:
-                    with st.spinner("Sending email…"):
-                        send_report_email(api_key, st.session_state["pdf_bytes"],
-                                           st.session_state["client_name"], from_addr)
-                        if st.session_state.get("intervention_pdf_bytes"):
-                            send_intervention_email(
-                                api_key, st.session_state["intervention_pdf_bytes"],
-                                st.session_state["client_name"], from_addr)
-                    st.success(f"Report(s) emailed to {THERAPIST_EMAIL}.")
-                    delete_session(st.session_state["sid"])
-                except Exception as e:
-                    st.error(f"Could not send email: {e}")
-    else:
-        st.caption("Generate the client report above first.")
+                    api_key = st.secrets.get("RESEND_API_KEY", "")
+                    from_addr = st.secrets.get("RESEND_FROM_ADDRESS", "")
+                    if api_key and from_addr:
+                        import resend
+                        resend.api_key = api_key
+                        resend.Emails.send({
+                            "from": from_addr,
+                            "to": [THERAPIST_EMAIL],
+                            "subject": f"[Enneagram tool] Report generation failed — {st.session_state.get('client_name') or 'client'}",
+                            "html": f"<p>Automatic report generation/emailing failed with:</p><pre>{e}</pre>",
+                        })
+                except Exception:
+                    pass
+        st.session_state["submitted"] = True
+        persist_progress()
+        delete_session(st.session_state["sid"])
 
+    st.markdown('<div class="card" style="text-align:center;">', unsafe_allow_html=True)
+    st.markdown(f"## {t('thankyou_title', lang)}")
+    st.markdown(t("thankyou_body", lang))
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="footer-note">{t("footer_note", lang)}</div>', unsafe_allow_html=True)
 
 
