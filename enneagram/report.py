@@ -1,30 +1,52 @@
-"""PDF report generation: premium, clinical-style layout with charts."""
+"""PDF report generation: premium, clinical-style layout with charts.
+
+Narrative/explanatory content (titles, clinical notes, type profiles) always
+renders in English regardless of which language the client answered in. Only
+the Q&A appendix reflects the client's actual answer language - see
+answer_language in generate_pdf_report() and the Arabic rendering helpers
+below.
+"""
 
 import io
+import os
 from datetime import datetime
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import arabic_reshaper
+from bidi.algorithm import get_display
 
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle,
     PageBreak, HRFlowable, KeepTogether,
 )
 from reportlab.pdfgen import canvas as rl_canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from .questions import TYPE_NAMES, TYPE_ITEMS, INSTINCT_ITEMS, INSTINCT_NAMES, FUNCTIONING_ITEMS
+from .questions_ar import TYPE_ITEMS_AR, INSTINCT_ITEMS_AR, FUNCTIONING_ITEMS_AR
 from .content import (
     TYPE_PROFILES, LEVEL_BANDS, CENTER_SUMMARY, FIX_DESCRIPTIONS,
     INSTINCT_POSITION_DESC, ARROW_CLARIFICATION, FUNCTIONING_VS_LEVELS_NOTE,
 )
 from .scoring import band_for_score
+
+_ARABIC_FONT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts", "NotoNaskhArabic.ttf")
+pdfmetrics.registerFont(TTFont("ArabicFont", _ARABIC_FONT_PATH))
+
+
+def _ar(text):
+    """Reshape + bidi-reorder Arabic text so it renders correctly in reportlab."""
+    return get_display(arabic_reshaper.reshape(text))
 
 # ---------------------------------------------------------------------------
 # Palette - muted, clinical, "premium letterhead" feel
@@ -164,6 +186,8 @@ def _styles():
                            textColor=SLATE, leading=11))
     ss.add(ParagraphStyle(name="QItem", fontName="Helvetica", fontSize=8.3,
                            textColor=TEXT_DARK, leading=12))
+    ss.add(ParagraphStyle(name="QItemAR", fontName="ArabicFont", fontSize=9.2,
+                           textColor=TEXT_DARK, leading=15, alignment=TA_RIGHT))
     ss.add(ParagraphStyle(name="CoverFooter", fontName="Helvetica", fontSize=9,
                            textColor=SLATE_LIGHT, alignment=TA_CENTER, leading=12))
     return ss
@@ -189,8 +213,10 @@ def _header_footer(canvas, doc):
 
 
 def generate_pdf_report(client_info, type_result, instinct_result, functioning_score,
-                         type_answers, instinct_answers, functioning_answers):
-    """Returns PDF bytes."""
+                         type_answers, instinct_answers, functioning_answers, answer_language="en"):
+    """Returns PDF bytes. All narrative content is always English; when
+    answer_language == "ar", only the Q&A appendix statement text switches to
+    the Arabic wording the client actually saw (properly shaped/reordered)."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=LETTER,
@@ -346,11 +372,17 @@ def generate_pdf_report(client_info, type_result, instinct_result, functioning_s
     story.append(PageBreak())
 
     # ---------------- Full Q&A appendix ----------------
+    is_ar = answer_language == "ar"
     story.append(Paragraph("Appendix A — Full Item Responses (Type Scale)", ss["SectionHeader"]))
+    if is_ar:
+        story.append(Paragraph(
+            "<i>The client answered in Arabic; statement text below is shown as presented to them.</i>",
+            ss["BodySmall"]))
     qa_rows = [["#", "Type", "Statement", "Response"]]
     for idx, (t, text) in enumerate(TYPE_ITEMS):
         ans = type_answers.get(idx, "—")
-        qa_rows.append([str(idx + 1), str(t), text, str(ans)])
+        cell = Paragraph(_ar(TYPE_ITEMS_AR[idx]), ss["QItemAR"]) if is_ar else text
+        qa_rows.append([str(idx + 1), str(t), cell, str(ans)])
     qa_table = Table(qa_rows, colWidths=[0.28 * inch, 0.38 * inch, 4.9 * inch, 0.55 * inch], repeatRows=1)
     qa_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
@@ -370,10 +402,15 @@ def generate_pdf_report(client_info, type_result, instinct_result, functioning_s
 
     story.append(PageBreak())
     story.append(Paragraph("Appendix B — Instinctual Variant Responses", ss["SectionHeader"]))
+    if is_ar:
+        story.append(Paragraph(
+            "<i>The client answered in Arabic; statement text below is shown as presented to them.</i>",
+            ss["BodySmall"]))
     inst_rows = [["#", "Instinct", "Statement", "Response"]]
     for idx, (inst, text) in enumerate(INSTINCT_ITEMS):
         ans = instinct_answers.get(idx, "—")
-        inst_rows.append([str(idx + 1), INSTINCT_NAMES[inst], text, str(ans)])
+        cell = Paragraph(_ar(INSTINCT_ITEMS_AR[idx]), ss["QItemAR"]) if is_ar else text
+        inst_rows.append([str(idx + 1), INSTINCT_NAMES[inst], cell, str(ans)])
     inst_table = Table(inst_rows, colWidths=[0.28 * inch, 1.1 * inch, 4.15 * inch, 0.58 * inch], repeatRows=1)
     inst_table.setStyle(qa_table.getStyle() if hasattr(qa_table, "getStyle") else TableStyle([]))
     inst_table.setStyle(TableStyle([
@@ -394,10 +431,15 @@ def generate_pdf_report(client_info, type_result, instinct_result, functioning_s
 
     story.append(PageBreak())
     story.append(Paragraph("Appendix C — Functioning Scale Responses", ss["SectionHeader"]))
+    if is_ar:
+        story.append(Paragraph(
+            "<i>The client answered in Arabic; statement text below is shown as presented to them.</i>",
+            ss["BodySmall"]))
     func_rows = [["#", "Statement", "Response"]]
     for idx, text in enumerate(FUNCTIONING_ITEMS):
         ans = functioning_answers.get(idx, "—")
-        func_rows.append([str(idx + 1), text, str(ans)])
+        cell = Paragraph(_ar(FUNCTIONING_ITEMS_AR[idx]), ss["QItemAR"]) if is_ar else text
+        func_rows.append([str(idx + 1), cell, str(ans)])
     func_table = Table(func_rows, colWidths=[0.3 * inch, 5.3 * inch, 0.6 * inch], repeatRows=1)
     func_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
