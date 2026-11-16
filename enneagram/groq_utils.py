@@ -9,6 +9,8 @@ Free API key: https://console.groq.com/keys (sign up, "Create API Key").
 """
 
 import json
+import re
+import time
 import urllib.request
 import urllib.error
 
@@ -20,7 +22,7 @@ from .content import TYPE_PROFILES, LEVEL_BANDS
 from .scoring import band_for_score
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 SYSTEM_PROMPT = """You are assisting a licensed psychotherapist by translating a client's Enneagram \
 self-assessment results into practitioner-facing session material. You write ONLY for the \
@@ -140,13 +142,72 @@ def _build_profile_context(client_name, type_result, instinct_result, functionin
     return "\n".join(lines)
 
 
+def _call_groq_once(payload, api_key, timeout):
+    """Single attempt. Returns parsed content dict, or raises RuntimeError.
+    Sets err.retryable = True for failures worth retrying (transient structured-
+    output glitches), False for ones a retry won't fix (auth, bad request shape).
+    """
+    req = urllib.request.Request(
+        GROQ_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            # Cloudflare (fronting api.groq.com) returns an HTTP 403 "error code: 1010"
+            # for urllib's default User-Agent, treating it as a bot signature.
+            "User-Agent": "Mozilla/5.0 (compatible; EnneagramClinicalTool/1.0)",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="ignore")
+        err = RuntimeError(f"Groq API error {e.code}: {detail[:500]}")
+        # Groq occasionally fails its own structured-output JSON validation
+        # transiently (code "json_validate_failed") - worth one retry.
+        err.retryable = (e.code == 400 and "json_validate_failed" in detail)
+        if e.code == 429:
+            # Free-tier rate limit - Groq tells us how long to wait; back off and retry.
+            m = re.search(r"try again in ([\d.]+)s", detail)
+            err.retry_after = float(m.group(1)) + 1 if m else 5.0
+            err.retryable = True
+        raise err from e
+    except urllib.error.URLError as e:
+        err = RuntimeError(f"Could not reach Groq API: {e.reason}")
+        err.retryable = True
+        raise err from e
+
+    try:
+        content = body["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        err = RuntimeError(f"Unexpected Groq response shape: {body}")
+        err.retryable = False
+        raise err from e
+
+    content = content.strip()
+    if content.startswith("```"):
+        content = content.strip("`")
+        if content.lower().startswith("json"):
+            content = content[4:]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        err = RuntimeError(f"Groq did not return valid JSON: {e}\nRaw content: {content[:800]}")
+        err.retryable = True
+        raise err from e
+
+
 def generate_intervention_content(client_name, type_result, instinct_result, functioning_score,
                                    type_answers, instinct_answers, api_key, model=None,
-                                   timeout=60):
+                                   timeout=60, max_attempts=2):
     """Calls Groq's chat completions API and returns the parsed JSON content dict.
     Raises RuntimeError with a clear message on any failure (missing key, HTTP error,
     bad JSON) so the caller can surface it to the practitioner rather than silently
-    falling back to generic content.
+    falling back to generic content. Retries once on known-transient failures.
     """
     if not api_key:
         raise RuntimeError(
@@ -171,37 +232,13 @@ def generate_intervention_content(client_name, type_result, instinct_result, fun
         "response_format": {"type": "json_object"},
     }
 
-    req = urllib.request.Request(
-        GROQ_API_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Groq API error {e.code}: {detail[:500]}") from e
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Could not reach Groq API: {e.reason}") from e
-
-    try:
-        content = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError) as e:
-        raise RuntimeError(f"Unexpected Groq response shape: {body}") from e
-
-    content = content.strip()
-    if content.startswith("```"):
-        content = content.strip("`")
-        if content.lower().startswith("json"):
-            content = content[4:]
-
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Groq did not return valid JSON: {e}\nRaw content: {content[:800]}") from e
+    last_err = None
+    for attempt in range(max_attempts):
+        try:
+            return _call_groq_once(payload, api_key, timeout)
+        except RuntimeError as e:
+            last_err = e
+            if not getattr(e, "retryable", False) or attempt == max_attempts - 1:
+                raise
+            time.sleep(min(getattr(e, "retry_after", 1.0), 30.0))
+    raise last_err

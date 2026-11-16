@@ -25,6 +25,29 @@ from .report import NAVY, SLATE, SLATE_LIGHT, GOLD, LINE_GRAY, BG_PANEL, TEXT_DA
 MAROON = colors.HexColor("#7A2E2E")
 MAROON_BG = colors.HexColor("#F7EDEC")
 
+# Helvetica/WinAnsiEncoding covers common "smart" typography (curly quotes,
+# en/em dashes, ellipsis) just fine - reportlab re-encodes those automatically.
+# What it does NOT cover is the hyphen-variant block (non-breaking hyphen etc.),
+# which an LLM sometimes emits in compound terms like "Type‑1" and which then
+# renders as a missing-glyph box. Only normalize those specific characters;
+# don't touch anything else, or we mangle perfectly fine punctuation.
+_CHAR_REPLACEMENTS = {
+    "‐": "-", "‑": "-", "‒": "-", "―": "-",  # hyphen variants
+    " ": " ",  # non-breaking space
+}
+
+
+def _sanitize(obj):
+    if isinstance(obj, str):
+        for bad, good in _CHAR_REPLACEMENTS.items():
+            obj = obj.replace(bad, good)
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    return obj
+
 
 def _styles():
     ss = getSampleStyleSheet()
@@ -74,6 +97,7 @@ def _header_footer(canvas, doc):
 
 
 def generate_intervention_pdf(client_info, type_result, instinct_result, functioning_score, ai_content):
+    ai_content = _sanitize(ai_content)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=LETTER, leftMargin=0.75 * inch, rightMargin=0.75 * inch,
