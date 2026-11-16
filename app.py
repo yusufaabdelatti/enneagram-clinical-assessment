@@ -237,16 +237,17 @@ def intro_page():
     lang = L()
     header(t("intro_kicker", lang), t("intro_title", lang), t("intro_sub", lang))
 
+    list_items = "".join(
+        f'<p dir="{"rtl" if lang == "ar" else "ltr"}" '
+        f'style="margin:0 0 0.45rem 0; text-align:{"right" if lang == "ar" else "left"}; color:#1F2430;">'
+        f'{i}. {text}</p>'
+        for i, text in enumerate(
+            [t("intro_li_1", lang), t("intro_li_2", lang), t("intro_li_3", lang)], start=1)
+    )
     st.markdown(
         f'<div class="card">'
         f'<p style="margin:0 0 .6rem 0;">{t("intro_card_intro", lang)}</p>'
-        f'<ol dir="{"rtl" if lang == "ar" else "ltr"}" '
-        f'style="margin:0 0 .8rem 0; padding-inline-start:1.1rem; padding-inline-end:0; '
-        f'color:#1F2430;">'
-        f'<li>{t("intro_li_1", lang)}</li>'
-        f'<li>{t("intro_li_2", lang)}</li>'
-        f'<li>{t("intro_li_3", lang)}</li>'
-        f'</ol>'
+        f'<div style="margin:0 0 .8rem 0;">{list_items}</div>'
         f'<p style="margin:0; color:#4A5568; font-size:0.9rem;">{t("intro_card_outro", lang)}</p>'
         f'<p style="margin:0.6rem 0 0 0; color:#8A94A6; font-size:0.82rem;">{t("intro_autosave_note", lang)}</p>'
         f'</div>', unsafe_allow_html=True)
