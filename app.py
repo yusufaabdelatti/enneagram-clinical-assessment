@@ -240,7 +240,9 @@ def intro_page():
     st.markdown(
         f'<div class="card">'
         f'<p style="margin:0 0 .6rem 0;">{t("intro_card_intro", lang)}</p>'
-        f'<ol style="margin:0 0 .8rem 1.1rem; padding:0; color:#1F2430;">'
+        f'<ol dir="{"rtl" if lang == "ar" else "ltr"}" '
+        f'style="margin:0 0 .8rem 0; padding-inline-start:1.1rem; padding-inline-end:0; '
+        f'color:#1F2430;">'
         f'<li>{t("intro_li_1", lang)}</li>'
         f'<li>{t("intro_li_2", lang)}</li>'
         f'<li>{t("intro_li_3", lang)}</li>'
