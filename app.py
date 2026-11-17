@@ -138,6 +138,11 @@ p, span, div, label {
 div[data-testid="stRadio"] > div { flex-direction: row-reverse; justify-content: flex-end; }
 div[data-testid="stForm"] label, .stTextInput label, .stTextArea label, .stCheckbox label { text-align: right; }
 .stProgress { direction: ltr; }
+/* Keep Back/Continue in fixed left/right slots in both languages - letting the RTL
+   container direction flip st.columns' flex order swapped which button appeared
+   on which side between pages, which was confusing/dangerous since the two
+   buttons have very different consequences (losing progress vs. advancing). */
+div[data-testid="stHorizontalBlock"] { direction: ltr; }
 </style>
 """
 
@@ -161,13 +166,28 @@ def scroll_to_top():
     components.html(
         f"""
         <script>
-            (function() {{
-                var doc = window.parent.document;
-                doc.documentElement.scrollTop = 0;
-                doc.body.scrollTop = 0;
-                var main = doc.querySelector('section.main');
-                if (main) {{ main.scrollTop = 0; }}
-            }})();
+            function doScroll() {{
+                try {{
+                    var w = window;
+                    for (var i = 0; i < 6 && w; i++) {{
+                        try {{
+                            w.scrollTo(0, 0);
+                            if (w.document && w.document.documentElement) w.document.documentElement.scrollTop = 0;
+                            if (w.document && w.document.body) w.document.body.scrollTop = 0;
+                            if (w.document) {{
+                                var candidates = w.document.querySelectorAll(
+                                    'section.main, [data-testid="stAppViewContainer"], [data-testid="stMain"], .main'
+                                );
+                                for (var j = 0; j < candidates.length; j++) {{ candidates[j].scrollTop = 0; }}
+                            }}
+                        }} catch (inner) {{}}
+                        if (w.parent && w.parent !== w) {{ w = w.parent; }} else {{ break; }}
+                    }}
+                }} catch (e) {{}}
+            }}
+            doScroll();
+            setTimeout(doScroll, 50);
+            setTimeout(doScroll, 250);
             // nonce: {nonce}
         </script>
         """,
@@ -327,7 +347,13 @@ def type_page():
     for i, idx in enumerate(chunk):
         text = type_item_text(idx)
         counter = f"{t('statement_label', lang)} {start + i + 1} {t('of', lang)} {len(order)}"
-        val = likert_block(text, counter, f"type_{idx}", opts)
+        key = f"type_{idx}"
+        # Authoritative source of truth is the answers dict (persisted to disk);
+        # re-sync it into the widget's own state in case that got reset for any
+        # reason, so navigating back and forth never silently drops an answer.
+        if idx in answers and key not in st.session_state:
+            st.session_state[key] = answers[idx]
+        val = likert_block(text, counter, key, opts)
         if val is not None:
             answers[idx] = val
 
@@ -361,7 +387,10 @@ def instinct_page():
     for i, idx in enumerate(order):
         text = instinct_item_text(idx)
         counter = f"{t('statement_label', lang)} {i + 1} {t('of', lang)} {len(order)}"
-        val = likert_block(text, counter, f"inst_{idx}", opts)
+        key = f"inst_{idx}"
+        if idx in answers and key not in st.session_state:
+            st.session_state[key] = answers[idx]
+        val = likert_block(text, counter, key, opts)
         if val is not None:
             answers[idx] = val
 
@@ -391,7 +420,10 @@ def functioning_page():
     for i in range(len(FUNCTIONING_ITEMS)):
         text = functioning_item_text(i)
         counter = f"{t('statement_label', lang)} {i + 1} {t('of', lang)} {len(FUNCTIONING_ITEMS)}"
-        val = likert_block(text, counter, f"func_{i}", opts)
+        key = f"func_{i}"
+        if i in answers and key not in st.session_state:
+            st.session_state[key] = answers[i]
+        val = likert_block(text, counter, key, opts)
         if val is not None:
             answers[i] = val
 
