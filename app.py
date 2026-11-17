@@ -1,6 +1,7 @@
 import random
 import uuid
 import streamlit as st
+import streamlit.components.v1 as components
 
 from enneagram.questions import (
     TYPE_ITEMS, INSTINCT_ITEMS, FUNCTIONING_ITEMS,
@@ -146,7 +147,36 @@ def inject_rtl_if_needed():
         st.markdown(RTL_CSS, unsafe_allow_html=True)
 
 
+def scroll_to_top():
+    """Streamlit reruns swap page content in place without resetting scroll
+    position, so after 'Continue' the next page can render starting wherever
+    the user had scrolled to on the previous one. Force it back to the top
+    on every page render. <script> tags inside st.markdown are stripped by
+    Streamlit's sanitizer, so this has to go through components.html, which
+    renders in a real iframe where scripts execute; the nonce comment makes
+    each call's markup unique so the browser re-executes it instead of
+    reusing an unchanged cached iframe."""
+    nonce = st.session_state.get("_scroll_nonce", 0) + 1
+    st.session_state["_scroll_nonce"] = nonce
+    components.html(
+        f"""
+        <script>
+            (function() {{
+                var doc = window.parent.document;
+                doc.documentElement.scrollTop = 0;
+                doc.body.scrollTop = 0;
+                var main = doc.querySelector('section.main');
+                if (main) {{ main.scrollTop = 0; }}
+            }})();
+            // nonce: {nonce}
+        </script>
+        """,
+        height=0,
+    )
+
+
 def header(kicker, title, sub=None):
+    scroll_to_top()
     st.markdown(f'<div class="brand-kicker">{kicker}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="brand-title">{title}</div>', unsafe_allow_html=True)
     if sub:
